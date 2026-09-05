@@ -24,23 +24,19 @@ website's CSV export and replace that file. No API keys or sudo are needed.
 python part1.py
 ```
 
-The default is 30 ping attempts per unique IPv4 address. To supply another export:
+The script takes no command-line arguments. It reads the exported CSV file and
+uses 10 ping attempts per unique IPv4 address. To change the settings, edit these
+constants near the top of `part1.py`:
 
-```bash
-python part1.py data/listed_iperf3_servers.csv --count 30
-```
+- `INPUT_FILE`: the CSV file to read.
+- `OUTPUT_DIR`: the folder in which to save each run.
+- `PINGS_PER_IP`: the number of probes per IP (10 by default).
 
-A small smoke test, including your public IP:
-
-```bash
-python part1.py --limit 2 --count 10
-```
-
-`--limit` restricts CSV hosts before DNS resolution. Omit it for the assignment
-run. Counts below 10 are useful only for development; use at least 10 for submission.
-Measurements run sequentially, at one ping per second. The supplied 190-row export
-can take approximately 1.5-2 hours at 30 pings per address, depending on DNS, timeouts,
-and how many addresses each hostname resolves to.
+Input and output paths are relative to the script's location, so running it from
+another directory works too. Use at least 10 pings per IP for submission.
+Measurements run sequentially, at one ping per second. Expect roughly 30-40 minutes
+for the supplied 190-row export when servers respond, with longer runs possible
+because of timeouts, slow lookups, or hostnames resolving to multiple addresses.
 
 ## What the script does
 
@@ -61,7 +57,7 @@ standard library and the macOS `/sbin/ping` command.
 
 ## Outputs
 
-Each run creates a new UTC timestamped directory under `results/` (or `--output DIR`):
+Each run creates a new UTC timestamped directory under the configured `OUTPUT_DIR` (initially `results/`):
 
 - `rtt_results.csv`: host, IP, self marker, coordinates, distance, RTT statistics,
   packet counts/loss, statuses, errors, and measurement time.
@@ -91,11 +87,3 @@ endpoint behavior. Neither statistic measures physical distance directly.
 
 IPWhois's free API has usage limits; HTTP or API errors are recorded without inventing
 coordinates. See the linked API documentation for current limits.
-
-## Checks
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Tests use synthetic ping output and mocked lookups; they do not contact remote servers.

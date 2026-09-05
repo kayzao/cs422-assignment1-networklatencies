@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """CS 422 Assignment 1, Part 1: CSV -> ping -> distances -> PDF plot (macOS)."""
 
-import argparse
 import csv
 from datetime import datetime, timezone
 import ipaddress
@@ -23,7 +22,10 @@ FIELDS = [
     "max_rtt_ms", "ping_status", "geo_status", "error", "measured_at_utc",
 ]
 
-DEFAULT_PINGS = 10
+# Edit these settings here; the script needs no command-line arguments.
+INPUT_FILE = Path(__file__).resolve().parent / "data/listed_iperf3_servers.csv"
+OUTPUT_DIR = Path(__file__).resolve().parent / "results"
+PINGS_PER_IP = 10
 
 
 def read_hosts(path):
@@ -177,35 +179,27 @@ def plot_results(rows, path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", nargs="?", type=Path,
-                        default=Path(__file__).parent / "data/listed_iperf3_servers.csv")
-    parser.add_argument("--count", type=int, default=DEFAULT_PINGS, help="Pings per IP (default: {DEFAULT_PINGS}; use >=10 for submission)")
-    parser.add_argument("--limit", type=int, help="Use only the first N CSV hosts for a smoke test")
-    parser.add_argument("--output", type=Path, default=Path("results"), help="Output parent directory (default: results)")
-    args = parser.parse_args()
+    # Check that this Mac is ready to run the experiment.
     if sys.platform != "darwin":
-        parser.error("This script uses the macOS ping command.")
-    if args.count < 1 or (args.limit is not None and args.limit < 1):
-        parser.error("--count and --limit must be positive.")
-    try:
-        import matplotlib  # Check the only added dependency before starting measurements.
-    except ImportError:
-        parser.error("Install dependencies with: python3 -m pip install -r requirements.txt")
-    hosts = read_hosts(args.input)
-    if args.limit is not None:
-        hosts = hosts[:args.limit]
+        raise RuntimeError("This script uses the macOS ping command.")
+    if PINGS_PER_IP < 1:
+        raise ValueError("PINGS_PER_IP must be positive.")
 
+    # Load every destination from the CSV configured at the top of this file.
+    hosts = read_hosts(INPUT_FILE)
+
+    # Estimate the starting coordinates from the current public IP automatically.
     print("Detecting public IPv4 address and estimating your location...", flush=True)
     public_ip = str(ipaddress.IPv4Address(fetch_json("https://api.ipify.org?format=json")["ip"]))
     origin = locate_ip(public_ip)
+    # Give each run its own folder and record the settings used for these measurements.
     started = datetime.now(timezone.utc)
-    output = args.output / started.strftime("%Y%m%dT%H%M%S_%fZ")
+    output = OUTPUT_DIR / started.strftime("%Y%m%dT%H%M%S_%fZ")
     output.mkdir(parents=True, exist_ok=False)
     print(f"Origin: {public_ip} ({origin['city']}, {origin['country']})")
     print(f"Results: {output.resolve()}\nMeasuring {len(hosts)} CSV hosts plus your public IP.", flush=True)
-    metadata = {"started_at_utc": started.isoformat(), "input": str(args.input.resolve()),
-                "count": args.count, "limit": args.limit, "origin": origin,
+    metadata = {"started_at_utc": started.isoformat(), "input": str(INPUT_FILE.resolve()),
+                "count": PINGS_PER_IP, "origin": origin,
                 "geolocation_source": "https://ipwhois.io/documentation",
                 "address_family": "IPv4", "ping_interval_seconds": 1,
                 "reply_wait_ms": 2000}
@@ -227,6 +221,7 @@ def main():
                 table.flush()
                 print(f"{host}: resolution failed: {exc}", flush=True)
                 continue
+            # A hostname can resolve to multiple IPs; measure each unique address once.
             for ip in ips:
                 if ip in seen:
                     log.write(f"\nSkipped duplicate: {host} -> {ip}\n")
@@ -235,18 +230,22 @@ def main():
                 print(f"[{len(seen)}] {host} -> {ip}: pinging...", flush=True)
                 row = {"host": host, "ip": ip, "is_self": ip == public_ip,
                        "measured_at_utc": datetime.now(timezone.utc).isoformat()}
-                row.update(ping_ip(ip, args.count, log))
+                # Wait for all PINGS_PER_IP probes, then parse the batch summary.
+                row.update(ping_ip(ip, PINGS_PER_IP, log))
                 try:
+                    # Reuse our own coordinates; look up each server and calculate its distance.
                     location = origin if ip == public_ip else locate_ip(ip)
                     row.update(latitude=location["latitude"], longitude=location["longitude"],
                                distance_km=round(distance_km(origin, location), 3), geo_status="ok")
                 except RuntimeError as exc:
                     row.update(geo_status="error", error="; ".join(filter(None, [row["error"], str(exc)])))
+                # Save each completed result immediately so an interrupted run keeps its data.
                 rows.append(row)
                 writer.writerow(row)
                 table.flush()
                 print(f"    ping={row['ping_status']}; location={row['geo_status']}; "
                       f"mean RTT={row.get('avg_rtt_ms', 'unavailable')} ms", flush=True)
+    # Once all destinations are processed, plot those with usable RTT and location data.
     plotted = plot_results(rows, output / "distance_vs_rtt.pdf")
     print(f"Done: {len(seen)} unique IPs attempted; {plotted} plotted. Files: {output.resolve()}")
     if not plotted:
