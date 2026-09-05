@@ -31,7 +31,7 @@ PINGS_PER_IP = 10
 
 
 def read_hosts(path):
-    """Read the website's export; iPerf ports are irrelevant to ICMP ping."""
+    """Read iPerfs exported CSV and return a list of unique hostnames or IPs."""
     # "with" closes the file automatically; utf-8-sig also accepts a CSV encoding marker.
     with path.open(newline="", encoding="utf-8-sig") as handle:
         # DictReader turns each CSV row into a dictionary keyed by column name.
@@ -49,7 +49,7 @@ def read_hosts(path):
 
 
 def resolve_ips(host):
-    """Keep IPv4-only; include all returned DNS A addresses."""
+    """Given a hostname or IP, return a sorted list of unique IPv4 addresses."""
     try:
         # ipaddress checks whether the input is already a numeric IP address.
         address = ipaddress.ip_address(host)
@@ -65,6 +65,11 @@ def resolve_ips(host):
 
 
 def fetch_json(url):
+    """
+    Download a JSON object from a URL and return it as Python data.
+    
+    Used for both the public IP and geolocation lookups. Raises RuntimeError on failure.
+    """
     # urllib prepares an HTTP request; User-Agent identifies this script to the service.
     request = Request(url, headers={"User-Agent": "cs422-assignment1/1.0"})
     try:
@@ -80,7 +85,11 @@ def fetch_json(url):
 
 
 def locate_ip(ip):
-    """Use the same public geolocation source for the origin and destinations."""
+    """
+    Look up an IP address's approximate geographic coordinates and return them in a dictionary.
+    
+    Raises RuntimeError if the lookup fails or returns invalid coordinates.
+    """
     data = fetch_json(f"https://ipwho.is/{ip}")
     # A web request can succeed even when the API reports that its lookup failed.
     if data.get("success") is not True:
@@ -135,6 +144,11 @@ def parse_ping(output):
 
 
 def ping_ip(ip, count, log):
+    """
+    Ping an IP address a given number of times and return a dictionary of statistics.
+    
+    The log file receives the full ping output and any errors. Raises OSError if ping fails.
+    """
     # -n keeps numeric addresses, -c sets the count, and -i 1 spaces probes one second apart.
     # On macOS -W is milliseconds; -t is a total deadline in seconds.
     command = ["/sbin/ping", "-n", "-c", str(count), "-i", "1", "-W", "2000",
@@ -173,6 +187,9 @@ def ping_ip(ip, count, log):
 
 
 def plot_results(rows, path):
+    """
+    Plot the measured RTTs against the geographic distances and save the figure to a file.
+    """
     import matplotlib
     matplotlib.use("Agg")  # Save figures to files without opening a graph window.
     import matplotlib.pyplot as plt
