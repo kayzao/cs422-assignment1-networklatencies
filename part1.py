@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS 422 Assignment 1, Part 1: CSV -> ping -> distances -> PDF plot"""
+"""CS 422 Assignment 1, Part 1: CSV -> ping -> distances -> PNG plot"""
 
 import csv
 from datetime import datetime, timezone
@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -119,12 +120,13 @@ def distance_km(origin, destination):
 
 
 def parse_ping(output):
-    """Read macOS's summary, including late replies counted by ping itself."""
+    """Read either macOS or Linux iputils ping summaries."""
     stats = {}
     # re.search finds a text pattern (a regular expression). Parentheses capture values;
     # \d+ matches digits and \s* allows whitespace in the ping summary.
+    # macOS says "packets received"; Linux iputils usually says just "received".
     packets = re.search(
-        r"(\d+) packets transmitted,\s*(\d+) packets received,.*?([\d.]+)% packet loss",
+        r"(\d+) packets transmitted,\s*(\d+)(?: packets)? received,.*?([\d.]+)% packet loss",
         output,
     )
     if packets:
@@ -132,8 +134,9 @@ def parse_ping(output):
         stats.update(transmitted=int(packets[1]), received=int(packets[2]),
                      packet_loss_pct=float(packets[3]))
     # Ping already computed these statistics; extract its min/average/max in milliseconds.
+    # Accept macOS's "round-trip ... stddev" and Linux's "rtt ... mdev" labels.
     rtt = re.search(
-        r"round-trip min/avg/max/stddev = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+) ms",
+        r"(?:round-trip|rtt) min/avg/max/(?:stddev|mdev) = ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+) ms",
         output,
     )
     if rtt:
@@ -147,12 +150,23 @@ def ping_ip(ip, count, log):
     """
     Ping an IP address a given number of times and return a dictionary of statistics.
     
-    The log file receives the full ping output and any errors. Raises OSError if ping fails.
+    The log file receives the full ping output and any errors. Returns a status for each attempt.
     """
+    # Find ping using PATH so its installation directory can differ between systems.
+    executable = shutil.which("ping")
+    if executable is None:
+        raise RuntimeError("ping was not found on PATH. On Linux, install iputils ping.")
     # -n keeps numeric addresses, -c sets the count, and -i 1 spaces probes one second apart.
-    # On macOS -W is milliseconds; -t is a total deadline in seconds.
-    command = ["/sbin/ping", "-n", "-c", str(count), "-i", "1", "-W", "2000",
-               "-t", str(count + 5), ip]
+    command = [executable, "-n", "-c", str(count), "-i", "1"]
+    if sys.platform == "darwin":
+        # macOS: -W uses milliseconds and -t sets the overall deadline in seconds.
+        command += ["-W", "2000", "-t", str(count + 5)]
+    elif sys.platform == "linux":
+        # Linux iputils: -W uses seconds; -w is the deadline (-t would change the TTL).
+        command += ["-W", "2", "-w", str(count + 5)]
+    else:
+        raise RuntimeError("This script supports macOS and Linux.")
+    command.append(ip)
     error = ""
     try:
         # subprocess runs the system ping program and waits for the whole batch.
@@ -232,8 +246,10 @@ def plot_results(rows, path):
 
 def main():
     # Check if ready to run the experiment.
-    if sys.platform != "darwin":
-        raise RuntimeError("This script uses the macOS ping command.")
+    if sys.platform not in ("darwin", "linux"):
+        raise RuntimeError("This script supports macOS and Linux.")
+    if shutil.which("ping") is None:
+        raise RuntimeError("ping was not found on PATH. On Linux, install iputils ping.")
     if PINGS_PER_IP < 1:
         raise ValueError("PINGS_PER_IP must be positive.")
 
@@ -251,7 +267,7 @@ def main():
     print(f"Origin: {public_ip} ({origin['city']}, {origin['country']})")
     print(f"Results: {output.resolve()}\nMeasuring {len(hosts)} CSV hosts plus your public IP.", flush=True)
     metadata = {"started_at_utc": started.isoformat(), "input": str(INPUT_FILE.resolve()),
-                "count": PINGS_PER_IP, "origin": origin,
+                "count": PINGS_PER_IP, "origin": origin, "platform": sys.platform,
                 "geolocation_source": "https://ipwhois.io/documentation",
                 "address_family": "IPv4", "ping_interval_seconds": 1,
                 "reply_wait_ms": 2000}
