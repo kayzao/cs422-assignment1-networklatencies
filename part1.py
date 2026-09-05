@@ -208,7 +208,7 @@ def plot_results(rows, path):
     ax.set_xlim(left=-100)
     ax.set_ylim(bottom=0)
     ax.grid(alpha=0.2)
-    fig.savefig(path)  # The .pdf filename tells Matplotlib which format to write.
+    fig.savefig(path, dpi=300)
     plt.close(fig)
     return len(valid)
 
@@ -283,7 +283,7 @@ def main():
                 print(f"    ping={row['ping_status']}; location={row['geo_status']}; "
                       f"mean RTT={row.get('avg_rtt_ms', 'unavailable')} ms", flush=True)
     # Once all destinations are processed, plot those with usable RTT and location data.
-    plotted = plot_results(rows, output / "distance_vs_rtt.pdf")
+    plotted = plot_results(rows, output / "distance_vs_rtt.png")
     print(f"Done: {len(seen)} unique IPs attempted; {plotted} plotted. Files: {output.resolve()}")
     if not plotted:
         print("No usable plot data. Review rtt_results.csv and ping.log.", file=sys.stderr)
