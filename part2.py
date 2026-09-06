@@ -105,7 +105,7 @@ def plot_results(results, output_dir):
 def main():
     output_dir = Path(sys.argv[1])
 
-    print("Resolving the CSV destinations for Part 2...", flush=True)
+    print("Resolving the CSV destinations for Part 2", flush=True)
     ips = set()
     for host in read_hosts(INPUT_FILE):
         try:
@@ -116,12 +116,12 @@ def main():
 
     results = []
     for ip in selected:
-        print(f"Tracing {ip}...", flush=True)
+        print(f"Tracing {ip}", flush=True)
         hops = trace_ip(ip)
         if hops:
             results.append({"destination": ip, "hops": hops})
         else:
-            print(f"    {ip}: non-responsive", flush=True)
+            print(f"{ip}: non-responsive", flush=True)
     plot_results(results, output_dir)
     print(f"Part 2 plots saved to {output_dir}")
 
