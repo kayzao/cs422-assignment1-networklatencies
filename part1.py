@@ -262,8 +262,10 @@ def main():
     origin = locate_ip(public_ip)
     # Give each run its own folder and record the settings used for these measurements.
     started = datetime.now(timezone.utc)
-    output = OUTPUT_DIR / started.strftime("%Y%m%dT%H%M%S_%fZ")
-    output.mkdir(parents=True, exist_ok=False)
+
+    output = Path(sys.argv[1])
+    output.mkdir(parents=True, exist_ok=True)
+
     print(f"Origin: {public_ip} ({origin['city']}, {origin['country']})")
     print(f"Results: {output.resolve()}\nMeasuring {len(hosts)} CSV hosts plus your public IP.", flush=True)
     metadata = {"started_at_utc": started.isoformat(), "input": str(INPUT_FILE.resolve()),
