@@ -64,7 +64,7 @@ def plot_results(results, output_dir):
             # Traceroute RTTs are cumulative. Differences estimate extra delay.
             # Across missing hops, a difference covers the entire gap.
             number = hop["hop"]
-            delta = hop["rtt_ms"] - previous
+            delta = max(0, hop["rtt_ms"] - previous)
             previous = hop["rtt_ms"]
             bottom = positive if delta >= 0 else negative
             label = f"Hop {number}" if number not in labels_used else None
@@ -82,9 +82,6 @@ def plot_results(results, output_dir):
     ax.axhline(0, color="black", linewidth=0.6)
     if labels_used:
         ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8, ncol=2)
-    fig.supxlabel("Signed RTT changes since the previous responding hop; gaps combine missing hops.\n"
-                  "Estimates, not measured link delays. Positive + negative stacks = destination RTT.",
-                  fontsize=9)
     fig.savefig(output_dir / "hop_latency_breakdown.pdf")
     plt.close(fig)
 
